@@ -5,6 +5,7 @@ import org.apache.curator.RetryPolicy;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
@@ -16,25 +17,44 @@ import javax.annotation.PostConstruct;
 @Component
 public class ZkConfig {
 
-    private static RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
+    @Value("${zk.config.ips}")
+    private String ips;
 
-    private static CuratorFramework client = CuratorFrameworkFactory.builder()
-            .connectString("127.0.0.1:2181,127.0.0.1:2182,127.0.0.1:2183")
-            .sessionTimeoutMs(3000)
-            .connectionTimeoutMs(5000)
-            .retryPolicy(retryPolicy)
-            .build();
+    @Value("${zk.config.session.timeout}")
+    private Integer sessionTimeOut = 3000;
 
+    @Value("${zk.config.connect.timeout}")
+    private Integer connectTimeout = 5000;
+
+    @Value("${zk.config.retry.base.sleep.time}")
+    private Integer baseSleepTimeMs = 1000;
+
+    @Value("${zk.config.retry.max.times}")
+    private Integer maxRetry = 3;
+
+    private CuratorFramework client = null;
 
     @PostConstruct
-    public void initZkClient() {
+    public void initZkClient() throws Exception {
+        RetryPolicy retryPolicy = new ExponentialBackoffRetry(baseSleepTimeMs, maxRetry);
+        client = CuratorFrameworkFactory.builder()
+                .connectString(ips)
+                .sessionTimeoutMs(sessionTimeOut)
+                .connectionTimeoutMs(connectTimeout)
+                .retryPolicy(retryPolicy)
+                .build();
         client.start();
-
         try {
             client.setData().forPath("/test/node", (new String("init ok").getBytes()));
-            log.info("zk init success");
         } catch (Exception e) {
             log.error("zk inint exception", e);
+            throw new Exception("zk init exception", e);
+        } finally {
+            if (null == client) {
+                throw new Exception("zk init fail,client null");
+            } else {
+                log.info("zk init success");
+            }
         }
 
     }
